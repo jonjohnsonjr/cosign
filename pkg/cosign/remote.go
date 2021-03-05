@@ -30,10 +30,10 @@ func Descriptors(ref name.Reference) ([]v1.Descriptor, error) {
 	return m.Layers, nil
 }
 
-func Upload(signature, payload []byte, dstTag name.Reference) error {
+func Upload(signature, payload []byte, mt string, dstTag name.Reference) error {
 	l := &staticLayer{
 		b:  payload,
-		mt: "application/vnd.dev.cosign.simplesigning.v1+json",
+		mt: types.MediaType(mt),
 	}
 	base, err := remote.Image(dstTag, remote.WithAuthFromKeychain(authn.DefaultKeychain))
 	if err != nil {

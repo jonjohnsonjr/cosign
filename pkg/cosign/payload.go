@@ -18,12 +18,25 @@ package cosign
 
 import (
 	"encoding/json"
+	"os"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 )
 
-func Payload(img v1.Descriptor, a map[string]string) ([]byte, error) {
-	simpleSigning := SimpleSigning{
+func Payload(img v1.Descriptor, a map[string]string) ([]byte, string, error) {
+	p, mt := getPayload(img, a)
+	b, err := json.Marshal(p)
+	return b, string(mt), err
+}
+
+func getPayload(img v1.Descriptor, a map[string]string) (interface{}, types.MediaType) {
+	if os.Getenv("JON_DESCRIPTOR") != "" {
+		img.Annotations = a
+		return img, types.OCIContentDescriptor
+	}
+
+	return SimpleSigning{
 		Critical: Critical{
 			Image: Image{
 				DockerManifestDigest: img.Digest.String(),
@@ -31,11 +44,5 @@ func Payload(img v1.Descriptor, a map[string]string) ([]byte, error) {
 			Type: "cosign container signature",
 		},
 		Optional: a,
-	}
-
-	b, err := json.Marshal(simpleSigning)
-	if err != nil {
-		return nil, err
-	}
-	return b, err
+	}, types.MediaType("application/vnd.dev.cosign.simplesigning.v1+json")
 }

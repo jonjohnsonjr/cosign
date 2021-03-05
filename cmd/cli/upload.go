@@ -75,8 +75,9 @@ func UploadCmd(ctx context.Context, sigRef, payloadRef, imageRef string) error {
 	dstTag := ref.Context().Tag(cosign.Munge(get.Descriptor))
 
 	var payload []byte
+	mt := "application/vnd.dev.cosign.simplesigning.v1+json"
 	if payloadRef == "" {
-		payload, err = cosign.Payload(get.Descriptor, nil)
+		payload, mt, err = cosign.Payload(get.Descriptor, nil)
 	} else {
 		payload, err = ioutil.ReadFile(payloadRef)
 	}
@@ -89,7 +90,7 @@ func UploadCmd(ctx context.Context, sigRef, payloadRef, imageRef string) error {
 	if err != nil {
 		return err
 	}
-	return cosign.Upload(sigBytes, payload, dstTag)
+	return cosign.Upload(sigBytes, payload, mt, dstTag)
 }
 
 type SignatureArgType uint8

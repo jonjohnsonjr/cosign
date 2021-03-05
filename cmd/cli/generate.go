@@ -62,7 +62,7 @@ func GenerateCmd(_ context.Context, imageRef string, a map[string]string, w io.W
 		return err
 	}
 
-	payload, err := cosign.Payload(get.Descriptor, a)
+	payload, _, err := cosign.Payload(get.Descriptor, a)
 	if err != nil {
 		return err
 	}

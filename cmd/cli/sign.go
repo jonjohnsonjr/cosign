@@ -103,11 +103,12 @@ func SignCmd(ctx context.Context, keyPath string,
 
 	// The payload can be specified via a flag to skip generation.
 	var payload []byte
+	var mt string
 	if payloadPath != "" {
 		fmt.Fprintln(os.Stderr, "Using payload from:", payloadPath)
 		payload, err = ioutil.ReadFile(payloadPath)
 	} else {
-		payload, err = cosign.Payload(get.Descriptor, annotations)
+		payload, mt, err = cosign.Payload(get.Descriptor, annotations)
 	}
 	if err != nil {
 		return err
@@ -136,7 +137,7 @@ func SignCmd(ctx context.Context, keyPath string,
 	dstTag := ref.Context().Tag(cosign.Munge(get.Descriptor))
 
 	fmt.Fprintln(os.Stderr, "Pushing signature to:", dstTag.String())
-	if err := cosign.Upload(signature, payload, dstTag); err != nil {
+	if err := cosign.Upload(signature, payload, mt, dstTag); err != nil {
 		return err
 	}
 

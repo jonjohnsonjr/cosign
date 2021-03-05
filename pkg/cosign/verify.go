@@ -29,6 +29,8 @@ import (
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 )
 
 const pubKeyPemType = "PUBLIC KEY"
@@ -116,7 +118,7 @@ func Verify(ref name.Reference, pubKey ed25519.PublicKey, checkClaims bool, anno
 	}
 
 	// Now we have to actually parse the payloads and make sure the digest (and other claims) are correct
-	verified, err := verifyClaims(desc.Digest.String(), annotations, valid)
+	verified, err := verifyClaims(*desc, annotations, valid)
 	if err != nil {
 		return nil, err
 	}
@@ -143,23 +145,21 @@ func validSignatures(pubKey ed25519.PublicKey, signatures []SignedPayload) ([]Si
 
 }
 
-func verifyClaims(digest string, annotations map[string]string, signatures []SignedPayload) ([]SignedPayload, error) {
+func verifyClaims(desc v1.Descriptor, annotations map[string]string, signatures []SignedPayload) ([]SignedPayload, error) {
 	checkClaimErrs := []string{}
 	// Now look through the payloads for things we understand
 	verifiedPayloads := []SignedPayload{}
 	for _, sp := range signatures {
-		ss := SimpleSigning{}
-		if err := json.Unmarshal(sp.Payload, &ss); err != nil {
+		foundDigest, foundAnnotations, err := digestAndClaims(desc, sp)
+		if err != nil {
 			checkClaimErrs = append(checkClaimErrs, err.Error())
+		}
+		if foundDigest != desc.Digest.String() {
+			checkClaimErrs = append(checkClaimErrs, fmt.Sprintf("invalid or missing digest in claim: %s", foundDigest))
 			continue
 		}
-		foundDgst := ss.Critical.Image.DockerManifestDigest
-		if foundDgst != digest {
-			checkClaimErrs = append(checkClaimErrs, fmt.Sprintf("invalid or missing digest in claim: %s", foundDgst))
-			continue
-		}
-		if !correctAnnotations(annotations, ss.Optional) {
-			checkClaimErrs = append(checkClaimErrs, fmt.Sprintf("invalid or missing annotation in claim: %v", ss.Optional))
+		if !correctAnnotations(annotations, foundAnnotations) {
+			checkClaimErrs = append(checkClaimErrs, fmt.Sprintf("invalid or missing annotation in claim: %v", foundAnnotations))
 			continue
 		}
 		verifiedPayloads = append(verifiedPayloads, sp)
@@ -168,6 +168,25 @@ func verifyClaims(digest string, annotations map[string]string, signatures []Sig
 		return nil, fmt.Errorf("no matching claims:\n%s", strings.Join(checkClaimErrs, "\n  "))
 	}
 	return verifiedPayloads, nil
+}
+
+func digestAndClaims(desc v1.Descriptor, sp SignedPayload) (string, map[string]string, error) {
+	if desc.MediaType == types.OCIManifestSchema1 {
+		d := v1.Descriptor{}
+		if err := json.Unmarshal(sp.Payload, &d); err != nil {
+			return "", nil, err
+		}
+		return d.Digest.String(), d.Annotations, nil
+	} else if desc.MediaType == "application/vnd.dev.cosign.simplesigning.v1+json" {
+		// TODO: expose mt
+		ss := SimpleSigning{}
+		if err := json.Unmarshal(sp.Payload, &ss); err != nil {
+			return "", nil, err
+		}
+		return ss.Critical.Image.DockerManifestDigest, ss.Optional, nil
+	}
+
+	return "", nil, fmt.Errorf("unexpected mediaType for %s: %s", desc.Digest.String(), desc.MediaType)
 }
 
 func correctAnnotations(wanted, have map[string]string) bool {
